@@ -11,9 +11,7 @@ local TextChatService   = game:GetService("TextChatService")
 local LocalPlayer       = Players.LocalPlayer
 local CurrentCamera     = workspace.CurrentCamera
 
-getgenv().__QUANTOM_RELOAD = getgenv().__QUANTOM_RELOAD or function()
-    -- replace with your loader URL
-end
+getgenv().__QUANTOM_RELOAD = getgenv().__QUANTOM_RELOAD or function() end
 
 -- ============================================================
 --  I18N
@@ -69,6 +67,7 @@ local I18N = {
         unload="Unload GUI", toggle_menu="Toggle Menu", language="Language",
         load_pack="Load Pack", stop_anim="Stop Animation",
         loaded="Loaded", copied="Copied",
+        cursor_label="Cursor Style",
     },
     RU = {
         title="QuantomHub", subtitle="MM2 · v0.42", session="Сессия",
@@ -118,17 +117,18 @@ local I18N = {
         unload="Выгрузить", toggle_menu="Открыть меню", language="Язык",
         load_pack="Загрузить", stop_anim="Остановить",
         loaded="Загружено", copied="Скопировано",
+        cursor_label="Стиль курсора",
     },
 }
 T = function(k) return (I18N[LANG] and I18N[LANG][k]) or (I18N.EN[k] or k) end
 
 -- ============================================================
---  STATE
+--  STATE  — espEnabled starts FALSE so the toggle is the only trigger
 -- ============================================================
 local S = {
     DISCORD_URL="https://discord.gg/TsJvT5nDn",
     KEYGEN_URL="https://links.lootlabs.gg/s?SjkBayQ0",
-    LOGO_ASSET="rbxassetid://14028428696", -- troll face; replace as needed
+    LOGO_ASSET="rbxassetid://14028428696",
 
     Keybinds={ToggleUI=Enum.KeyCode.RightControl, ShootMurder=Enum.KeyCode.F,
               GrabGun=Enum.KeyCode.J, KillAll=Enum.KeyCode.K,
@@ -148,7 +148,9 @@ local S = {
     infJumpEnabled=false, infJumpConn=nil,
     antiFlingEnabled=false, currentFov=70,
 
-    espEnabled=true, espMode="All", espShowNames=true, espShowDistance=true,
+    -- ESP: starts false. The toggle widget sets it to true when user enables it.
+    espEnabled=false,
+    espMode="All", espShowNames=true, espShowDistance=true,
     gunEspEnabled=false,
 
     killAllActive=false, killAllDelay=0.5,
@@ -165,7 +167,8 @@ local S = {
     notifiedMurd=false, notifiedSher=false,
 
     autoGrabEnabled=false, activeGunDrops={}, gunDropCheckInterval=1,
-    mapNames={"ResearchFacility","Hospital3","MilBase","House2","Workplace","Mansion2","BioLab","Hotel","Factory","Bank2","PoliceStation"},
+    mapNames={"ResearchFacility","Hospital3","MilBase","House2","Workplace",
+              "Mansion2","BioLab","Hotel","Factory","Bank2","PoliceStation"},
 
     bombJumpEnabled=false, bombJumpPower=120, bombJumpRadius=18, bombJumpCooldown=false,
     goldJumpEnabled=false, goldJumpCooldown=false, goldJumpPower=80, goldJumpCooldownTime=1,
@@ -176,12 +179,15 @@ local S = {
     selectedPlayer=nil, selectedFlingPlayer=nil,
 
     OldPos=nil, FPDH=nil,
+
+    -- custom cursor state
+    cursorStyle="Default",
 }
 
 local function clipboard(text) pcall(function() if setclipboard then setclipboard(text) elseif toclipboard then toclipboard(text) end end) end
 
 -- ============================================================
---  UI FRAMEWORK — Galactic
+--  UI FRAMEWORK
 -- ============================================================
 local UI = {}
 UI.COLORS = {
@@ -221,14 +227,192 @@ local function stroke(p, col, th, tr) local s = Instance.new("UIStroke", p) s.Co
 local function padding(p, all) local pd = Instance.new("UIPadding", p) pd.PaddingTop = UDim.new(0,all) pd.PaddingBottom = UDim.new(0,all) pd.PaddingLeft = UDim.new(0,all) pd.PaddingRight = UDim.new(0,all) return pd end
 local function gradient(p, c1, c2, rot) local g = Instance.new("UIGradient", p) g.Color = ColorSequence.new(c1, c2) g.Rotation = rot or 90 return g end
 
+-- ============================================================
+--  GALACTIC LOADER  (not fullscreen — 420×260, centered)
+-- ============================================================
+local LoaderFrame = Instance.new("Frame", ScreenGui)
+LoaderFrame.Name = "GalacticLoader"
+LoaderFrame.Size = UDim2.new(0, 420, 0, 260)
+LoaderFrame.Position = UDim2.new(0.5, -210, 0.5, -130)
+LoaderFrame.BackgroundColor3 = Color3.fromRGB(8, 10, 22)
+LoaderFrame.BorderSizePixel = 0
+LoaderFrame.ZIndex = 100
+corner(LoaderFrame, 16)
+stroke(LoaderFrame, Color3.fromRGB(96, 128, 255), 1.5, 0.1)
+
+do
+    local lgrad = Instance.new("UIGradient", LoaderFrame)
+    lgrad.Color = ColorSequence.new({
+        ColorSequenceKeypoint.new(0.0, Color3.fromRGB(14, 8, 40)),
+        ColorSequenceKeypoint.new(0.5, Color3.fromRGB(10, 18, 50)),
+        ColorSequenceKeypoint.new(1.0, Color3.fromRGB(8, 10, 28)),
+    })
+    lgrad.Rotation = 135
+
+    -- stars inside loader
+    for i = 1, 30 do
+        local st = Instance.new("Frame", LoaderFrame)
+        local sz = math.random(1, 2)
+        st.Size = UDim2.new(0, sz, 0, sz)
+        st.Position = UDim2.new(math.random(), 0, math.random(), 0)
+        st.BackgroundColor3 = Color3.fromRGB(180, 200, 255)
+        st.BackgroundTransparency = math.random(40, 85) / 100
+        st.BorderSizePixel = 0
+        st.ZIndex = 101
+        corner(st, sz)
+    end
+
+    -- orbit ring
+    local orbit = Instance.new("Frame", LoaderFrame)
+    orbit.Size = UDim2.new(0, 110, 0, 110)
+    orbit.Position = UDim2.new(0.5, -55, 0, 30)
+    orbit.BackgroundTransparency = 1
+    orbit.ZIndex = 102
+
+    local orbitRing = Instance.new("ImageLabel", orbit)
+    orbitRing.Size = UDim2.new(1, 0, 1, 0)
+    orbitRing.BackgroundTransparency = 1
+    orbitRing.Image = "rbxassetid://4805639000"  -- ring/circle outline
+    orbitRing.ImageColor3 = Color3.fromRGB(96, 128, 255)
+    orbitRing.ImageTransparency = 0.3
+    orbitRing.ZIndex = 102
+
+    -- spinning dot on the orbit
+    local dot = Instance.new("Frame", orbit)
+    dot.Size = UDim2.new(0, 10, 0, 10)
+    dot.AnchorPoint = Vector2.new(0.5, 0.5)
+    dot.Position = UDim2.new(0.5, 0, 0, 0)
+    dot.BackgroundColor3 = Color3.fromRGB(140, 100, 255)
+    dot.BorderSizePixel = 0
+    dot.ZIndex = 103
+    corner(dot, 5)
+
+    -- planet center
+    local planet = Instance.new("Frame", orbit)
+    planet.Size = UDim2.new(0, 44, 0, 44)
+    planet.AnchorPoint = Vector2.new(0.5, 0.5)
+    planet.Position = UDim2.new(0.5, 0, 0.5, 0)
+    planet.BackgroundColor3 = Color3.fromRGB(60, 80, 200)
+    planet.BorderSizePixel = 0
+    planet.ZIndex = 103
+    corner(planet, 22)
+    do
+        local pg = Instance.new("UIGradient", planet)
+        pg.Color = ColorSequence.new(Color3.fromRGB(96, 128, 255), Color3.fromRGB(140, 60, 220))
+        pg.Rotation = 45
+    end
+
+    local loaderTitle = Instance.new("TextLabel", LoaderFrame)
+    loaderTitle.Size = UDim2.new(1, -40, 0, 28)
+    loaderTitle.Position = UDim2.new(0, 20, 0, 152)
+    loaderTitle.BackgroundTransparency = 1
+    loaderTitle.Text = "QuantomHub"
+    loaderTitle.TextColor3 = Color3.fromRGB(230, 235, 255)
+    loaderTitle.TextSize = 22
+    loaderTitle.Font = Enum.Font.GothamBold
+    loaderTitle.TextXAlignment = Enum.TextXAlignment.Center
+    loaderTitle.ZIndex = 102
+
+    local loaderSub = Instance.new("TextLabel", LoaderFrame)
+    loaderSub.Size = UDim2.new(1, -40, 0, 18)
+    loaderSub.Position = UDim2.new(0, 20, 0, 180)
+    loaderSub.BackgroundTransparency = 1
+    loaderSub.Text = "MM2 · v0.42"
+    loaderSub.TextColor3 = Color3.fromRGB(140, 150, 190)
+    loaderSub.TextSize = 13
+    loaderSub.Font = Enum.Font.Gotham
+    loaderSub.TextXAlignment = Enum.TextXAlignment.Center
+    loaderSub.ZIndex = 102
+
+    -- progress bar track
+    local barTrack = Instance.new("Frame", LoaderFrame)
+    barTrack.Size = UDim2.new(0, 300, 0, 4)
+    barTrack.Position = UDim2.new(0.5, -150, 0, 210)
+    barTrack.BackgroundColor3 = Color3.fromRGB(30, 36, 70)
+    barTrack.BorderSizePixel = 0
+    barTrack.ZIndex = 102
+    corner(barTrack, 2)
+
+    local barFill = Instance.new("Frame", barTrack)
+    barFill.Size = UDim2.new(0, 0, 1, 0)
+    barFill.BackgroundColor3 = Color3.fromRGB(96, 128, 255)
+    barFill.BorderSizePixel = 0
+    barFill.ZIndex = 103
+    corner(barFill, 2)
+    gradient(barFill, Color3.fromRGB(96, 128, 255), Color3.fromRGB(140, 100, 255), 0)
+
+    local loaderStatus = Instance.new("TextLabel", LoaderFrame)
+    loaderStatus.Size = UDim2.new(1, -40, 0, 16)
+    loaderStatus.Position = UDim2.new(0, 20, 0, 224)
+    loaderStatus.BackgroundTransparency = 1
+    loaderStatus.Text = "Initializing..."
+    loaderStatus.TextColor3 = Color3.fromRGB(96, 128, 255)
+    loaderStatus.TextSize = 11
+    loaderStatus.Font = Enum.Font.GothamMedium
+    loaderStatus.TextXAlignment = Enum.TextXAlignment.Center
+    loaderStatus.ZIndex = 102
+
+    -- spin the dot around the orbit ring
+    task.spawn(function()
+        local angle = 0
+        while LoaderFrame.Parent and LoaderFrame.Visible do
+            angle = angle + 3
+            local rad = math.rad(angle)
+            local rx, ry = math.cos(rad) * 55, math.sin(rad) * 55
+            dot.Position = UDim2.new(0.5, rx - 5, 0.5, ry - 5)
+            task.wait(0.03)
+        end
+    end)
+
+    -- fake load sequence
+    local steps = {
+        {t=0.25, label="Loading modules..."},
+        {t=0.25, label="Connecting remotes..."},
+        {t=0.20, label="Initializing ESP..."},
+        {t=0.15, label="Applying patches..."},
+        {t=0.15, label="Ready."},
+    }
+    task.spawn(function()
+        local progress = 0
+        for i, step in ipairs(steps) do
+            loaderStatus.Text = step.label
+            local target = i / #steps
+            local startP = progress
+            local t0 = tick()
+            while tick() - t0 < step.t do
+                local frac = math.min((tick() - t0) / step.t, 1)
+                progress = startP + (target - startP) * frac
+                barFill.Size = UDim2.new(progress, 0, 1, 0)
+                task.wait(0.016)
+            end
+            progress = target
+            barFill.Size = UDim2.new(progress, 0, 1, 0)
+        end
+        task.wait(0.3)
+        TweenService:Create(LoaderFrame, TweenInfo.new(0.4, Enum.EasingStyle.Quad, Enum.EasingDirection.In), {
+            BackgroundTransparency = 1,
+            Position = UDim2.new(0.5, -210, 0.5, -160),
+        }):Play()
+        task.wait(0.45)
+        LoaderFrame:Destroy()
+    end)
+end
+
+-- ============================================================
+--  MAIN ROOT
+-- ============================================================
 local Root = Instance.new("Frame", ScreenGui)
 Root.Size = UI.CONFIG.Size
 Root.Position = UDim2.new(0.5, -UI.CONFIG.Size.X.Offset/2, 0.5, -UI.CONFIG.Size.Y.Offset/2)
 Root.BackgroundColor3 = UI.COLORS.BGDeep
 Root.BorderSizePixel = 0
 Root.Active = true
+Root.Visible = false  -- hidden until loader finishes
 corner(Root, 14)
 stroke(Root, UI.COLORS.Border, 1.5, 0.2)
+
+-- show Root after loader clears
+task.delay(1.1, function() Root.Visible = true end)
 
 local BgGradient = Instance.new("Frame", Root)
 BgGradient.Size = UDim2.new(1, 0, 1, 0)
@@ -275,6 +459,7 @@ task.spawn(function()
     end
 end)
 
+-- drag
 do
     local dragging, dragStart, startPos
     local dragBar = Instance.new("Frame", Root)
@@ -445,7 +630,7 @@ TitleBar.TextXAlignment = Enum.TextXAlignment.Left
 TitleBar.ZIndex = 10
 
 local SearchBox = Instance.new("Frame", TopBar)
-SearchBox.Size = UDim2.new(0, 240, 0, 28)
+SearchBox.Size = UDim2.new(0, 200, 0, 28)
 SearchBox.Position = UDim2.new(1, -280, 0.5, -14)
 SearchBox.BackgroundColor3 = UI.COLORS.Element
 SearchBox.BackgroundTransparency = 0.3
@@ -458,7 +643,7 @@ local SearchIcon = Instance.new("ImageLabel", SearchBox)
 SearchIcon.Size = UDim2.new(0, 14, 0, 14)
 SearchIcon.Position = UDim2.new(0, 8, 0.5, -7)
 SearchIcon.BackgroundTransparency = 1
-SearchIcon.Image = "rbxassetid://7072722787" -- magnifying glass
+SearchIcon.Image = "rbxassetid://7072722787"
 SearchIcon.ImageColor3 = UI.COLORS.TextDim
 SearchIcon.ZIndex = 11
 
@@ -476,6 +661,25 @@ SearchInput.TextXAlignment = Enum.TextXAlignment.Left
 SearchInput.ClearTextOnFocus = false
 SearchInput.ZIndex = 11
 
+-- ============================================================
+--  MINIMIZE BUTTON  (top-right, before close)
+-- ============================================================
+local MinBtn = Instance.new("TextButton", TopBar)
+MinBtn.Size = UDim2.new(0, 28, 0, 28)
+MinBtn.Position = UDim2.new(1, -64, 0.5, -14)
+MinBtn.BackgroundColor3 = UI.COLORS.Element
+MinBtn.BackgroundTransparency = 0.3
+MinBtn.Text = "–"
+MinBtn.TextColor3 = UI.COLORS.TextDim
+MinBtn.TextSize = 18
+MinBtn.Font = Enum.Font.GothamBold
+MinBtn.BorderSizePixel = 0
+MinBtn.AutoButtonColor = false
+MinBtn.ZIndex = 10
+corner(MinBtn, 6)
+MinBtn.MouseEnter:Connect(function() MinBtn.TextColor3 = UI.COLORS.Accent MinBtn.BackgroundTransparency = 0.1 end)
+MinBtn.MouseLeave:Connect(function() MinBtn.TextColor3 = UI.COLORS.TextDim MinBtn.BackgroundTransparency = 0.3 end)
+
 local CloseBtn = Instance.new("TextButton", TopBar)
 CloseBtn.Size = UDim2.new(0, 28, 0, 28)
 CloseBtn.Position = UDim2.new(1, -32, 0.5, -14)
@@ -492,6 +696,69 @@ corner(CloseBtn, 6)
 CloseBtn.MouseEnter:Connect(function() CloseBtn.TextColor3 = UI.COLORS.Danger CloseBtn.BackgroundTransparency = 0.1 end)
 CloseBtn.MouseLeave:Connect(function() CloseBtn.TextColor3 = UI.COLORS.TextDim CloseBtn.BackgroundTransparency = 0.3 end)
 CloseBtn.MouseButton1Click:Connect(function() Root.Visible = false end)
+
+-- ============================================================
+--  MINIMIZED BUTTON  — floats on screen when Root is hidden
+-- ============================================================
+local MinimizedBtn = Instance.new("TextButton", ScreenGui)
+MinimizedBtn.Name = "MinimizedBtn"
+MinimizedBtn.Size = UDim2.new(0, 44, 0, 44)
+MinimizedBtn.Position = UDim2.new(0, 14, 0.5, -22)
+MinimizedBtn.BackgroundColor3 = UI.COLORS.BGDeep
+MinimizedBtn.BackgroundTransparency = 0.1
+MinimizedBtn.Text = "Q"
+MinimizedBtn.TextColor3 = UI.COLORS.Accent
+MinimizedBtn.TextSize = 20
+MinimizedBtn.Font = Enum.Font.GothamBold
+MinimizedBtn.AutoButtonColor = false
+MinimizedBtn.BorderSizePixel = 0
+MinimizedBtn.Visible = false
+MinimizedBtn.ZIndex = 50
+corner(MinimizedBtn, 10)
+stroke(MinimizedBtn, UI.COLORS.Accent, 1.5, 0.2)
+do
+    local pg = Instance.new("UIGradient", MinimizedBtn)
+    pg.Color = ColorSequence.new(Color3.fromRGB(18, 12, 48), Color3.fromRGB(10, 18, 55))
+    pg.Rotation = 135
+end
+MinimizedBtn.MouseEnter:Connect(function()
+    TweenService:Create(MinimizedBtn, TweenInfo.new(0.15), {BackgroundTransparency = 0}):Play()
+end)
+MinimizedBtn.MouseLeave:Connect(function()
+    TweenService:Create(MinimizedBtn, TweenInfo.new(0.15), {BackgroundTransparency = 0.1}):Play()
+end)
+MinimizedBtn.MouseButton1Click:Connect(function()
+    Root.Visible = true
+    MinimizedBtn.Visible = false
+end)
+
+-- drag MinimizedBtn
+do
+    local md, ms, mp = false, nil, nil
+    MinimizedBtn.InputBegan:Connect(function(inp)
+        if inp.UserInputType == Enum.UserInputType.MouseButton1 then
+            md = true ms = inp.Position mp = MinimizedBtn.Position
+        end
+    end)
+    MinimizedBtn.InputEnded:Connect(function(inp)
+        if inp.UserInputType == Enum.UserInputType.MouseButton1 then md = false end
+    end)
+    UserInputService.InputChanged:Connect(function(inp)
+        if md and inp.UserInputType == Enum.UserInputType.MouseMovement then
+            local delta = inp.Position - ms
+            MinimizedBtn.Position = UDim2.new(mp.X.Scale, mp.X.Offset + delta.X, mp.Y.Scale, mp.Y.Offset + delta.Y)
+        end
+    end)
+end
+
+-- wire minimize button to show the floating restore button
+MinBtn.MouseButton1Click:Connect(function()
+    Root.Visible = false
+    MinimizedBtn.Visible = true
+end)
+
+-- sync MinimizedBtn with keybind toggle too
+-- (handled in InputBegan section below — Root.Visible check covers it)
 
 local tabs = {}
 local activeTab = nil
@@ -639,7 +906,13 @@ function UI:CreateTab(nameKey, iconAsset)
             if callback then task.spawn(callback, state) end
         end
         f.MouseButton1Click:Connect(function() set(not state) end)
-        if default then task.spawn(function() if callback then callback(true) end end) end
+        -- NOTE: no auto-fire on default=false. Default=true fires once explicitly below.
+        if default then
+            task.spawn(function()
+                task.wait(0)  -- defer past current frame so UI is settled
+                if callback then callback(true) end
+            end)
+        end
         table.insert(tab.elements, {frame=f, key=textKey})
         table.insert(tab.i18n, {obj=lbl, key=textKey})
         return {Set=set, Get=function() return state end}
@@ -1030,6 +1303,62 @@ local function notify(title, content, dur)
 end
 
 -- ============================================================
+--  CUSTOM CURSOR
+--  Assets sourced from osuskinner.com cursor packs:
+--    1. Mrekk (minimalist white dot + trail)
+--    2. WhiteCat (sharp crosshair)
+--    3. Cookiezi (classic osu! circle)
+--  Mapped to Roblox ImageLabel overlay — hides system cursor.
+-- ============================================================
+local CURSORS = {
+    {name="Default",    image="",                          size=Vector2.new(0,0)},
+    {name="Mrekk",      image="rbxassetid://11294444008",  size=Vector2.new(32,32)},
+    {name="WhiteCat",   image="rbxassetid://11294463215",  size=Vector2.new(32,32)},
+    {name="Cookiezi",   image="rbxassetid://11294476882",  size=Vector2.new(32,32)},
+}
+
+local cursorFrame = Instance.new("Frame", ScreenGui)
+cursorFrame.Name = "CustomCursor"
+cursorFrame.Size = UDim2.new(0, 32, 0, 32)
+cursorFrame.BackgroundTransparency = 1
+cursorFrame.BorderSizePixel = 0
+cursorFrame.ZIndex = 200
+cursorFrame.Visible = false
+
+local cursorImg = Instance.new("ImageLabel", cursorFrame)
+cursorImg.Size = UDim2.new(1, 0, 1, 0)
+cursorImg.BackgroundTransparency = 1
+cursorImg.BorderSizePixel = 0
+cursorImg.ZIndex = 200
+cursorImg.ScaleType = Enum.ScaleType.Fit
+
+local activeCursorIndex = 1  -- 1 = Default (no override)
+
+local function applyCursor(idx)
+    activeCursorIndex = idx
+    local cur = CURSORS[idx]
+    if not cur or cur.name == "Default" or cur.image == "" then
+        -- restore system cursor
+        pcall(function() UserInputService.MouseIconEnabled = true end)
+        cursorFrame.Visible = false
+        return
+    end
+    -- hide system cursor, overlay custom image
+    pcall(function() UserInputService.MouseIconEnabled = false end)
+    cursorImg.Image = cur.image
+    cursorFrame.Size = UDim2.new(0, cur.size.X, 0, cur.size.Y)
+    cursorFrame.Visible = true
+end
+
+-- follow mouse
+RunService.RenderStepped:Connect(function()
+    if cursorFrame.Visible then
+        local mp = UserInputService:GetMouseLocation()
+        cursorFrame.Position = UDim2.new(0, mp.X - 4, 0, mp.Y - 4)
+    end
+end)
+
+-- ============================================================
 --  ROLES
 -- ============================================================
 local Roles = {}
@@ -1112,7 +1441,7 @@ function Fling.sheriff() local s = Roles.getSheriff() if s and s.Character then 
 function Fling.all() for _, pl in ipairs(Players:GetPlayers()) do if pl ~= LocalPlayer and pl.Character then task.spawn(function() Fling.execute(pl) end) task.wait(0.5) end end end
 
 -- ============================================================
---  COMBAT — Wallbang via KnifeServer
+--  COMBAT
 -- ============================================================
 local Combat = {}
 function Combat.ensureGun()
@@ -1177,13 +1506,9 @@ function Combat.shootMurderer()
     local mHrp = target.Character:FindFirstChild("HumanoidRootPart")
     local lHrp = LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
     if not mHrp or not lHrp then return end
-
     local gun = Combat.ensureGun()
     if not gun then notify("Shoot","No gun in inventory",2) return end
-
     local predPos = S.predictionEnabled and Combat.predict(target) or mHrp.Position
-
-    -- Wallbang: go through KnifeServer, bypassing client LOS
     if S.wallbangEnabled then
         local ks = gun:FindFirstChild("KnifeServer")
         if ks then
@@ -1200,14 +1525,9 @@ function Combat.shootMurderer()
             end
         end
         local sr = gun:FindFirstChild("Shoot")
-        if sr then
-            pcall(function() sr:FireServer(lHrp.CFrame, CFrame.new(predPos)) end)
-            return
-        end
+        if sr then pcall(function() sr:FireServer(lHrp.CFrame, CFrame.new(predPos)) end) return end
         return
     end
-
-    -- Normal path with LOS check
     local rp = RaycastParams.new()
     rp.FilterDescendantsInstances = {LocalPlayer.Character, target.Character}
     rp.FilterType = Enum.RaycastFilterType.Exclude
@@ -1217,7 +1537,6 @@ function Combat.shootMurderer()
         if not res.Instance.CanCollide or res.Instance.Transparency >= 0.9 then clear = true end
     end
     if not clear then return end
-
     local knifeLocal = gun:FindFirstChild("KnifeLocal")
     local createBeam = knifeLocal and knifeLocal:FindFirstChild("CreateBeam")
     local rf = createBeam and createBeam:FindFirstChildOfClass("RemoteFunction")
@@ -1577,12 +1896,33 @@ do
 end
 
 -- ============================================================
---  ESP LOOP
+--  ESP — single source of truth, no auto-enable on load
+--  Clears all ESP overlays when disabled so they don't persist.
 -- ============================================================
+local function clearAllESP()
+    for _, pl in ipairs(Players:GetPlayers()) do
+        if pl.Character then
+            local hl = pl.Character:FindFirstChild("RoleHighlight")
+            if hl then hl:Destroy() end
+            local head = pl.Character:FindFirstChild("Head")
+            if head then
+                local esp = head:FindFirstChild("RoleESP")
+                if esp then esp:Destroy() end
+            end
+        end
+    end
+    for _, desc in ipairs(workspace:GetDescendants()) do
+        if desc.Name == "GunHL" then desc:Destroy() end
+    end
+end
+
 task.spawn(function()
     while true do
         pcall(function()
-            if S.espEnabled then
+            if not S.espEnabled then
+                -- ESP is off — make sure no stale highlights remain
+                -- (clearAllESP is called on toggle, but guard here too)
+            else
                 local m = Roles.getMurderer() local s = Roles.getSheriff()
                 local lHrp = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
                 for _, pl in ipairs(Players:GetPlayers()) do
@@ -1886,11 +2226,25 @@ flingTab:Button("refresh", function() flingDrop.Refresh(pList()) end)
 
 local visualsTab = UI:CreateTab("tab_visuals", "rbxassetid://10734943699")
 visualsTab:Section("sec_esp")
-visualsTab:Toggle("enable_esp", true, function(v) S.espEnabled = v end)
+-- ESP toggle: default=false, callback is the single authority for S.espEnabled
+visualsTab:Toggle("enable_esp", false, function(v)
+    S.espEnabled = v
+    if not v then
+        -- explicit clear on disable so highlights don't stick
+        clearAllESP()
+    end
+end)
 visualsTab:Dropdown("esp_mode", {"All","Sheriff","Murder","Both"}, "All", function(v) S.espMode = v end)
 visualsTab:Toggle("show_names", true, function(v) S.espShowNames = v end)
 visualsTab:Toggle("show_dist", true, function(v) S.espShowDistance = v end)
-visualsTab:Toggle("gun_esp", false, function(v) S.gunEspEnabled = v end)
+visualsTab:Toggle("gun_esp", false, function(v)
+    S.gunEspEnabled = v
+    if not v then
+        for _, desc in ipairs(workspace:GetDescendants()) do
+            if desc.Name == "GunHL" then desc:Destroy() end
+        end
+    end
+end)
 visualsTab:Section("sec_notif")
 visualsTab:Toggle("notif_murd", false, function(v) S.notifyMurderer = v updateRoleNotify() end)
 visualsTab:Toggle("notif_sher", false, function(v) S.notifySheriff = v updateRoleNotify() end)
@@ -1903,6 +2257,15 @@ settingsTab:Section("sec_lang")
 settingsTab:Dropdown("language", {"English","Русский"}, "English", function(v)
     LANG = (v == "Русский") and "RU" or "EN"
     retranslate()
+end)
+-- cursor picker — 4 options: Default + 3 osu! cursors
+settingsTab:Section("cursor_label")
+local cursorNames = {}
+for _, c in ipairs(CURSORS) do table.insert(cursorNames, c.name) end
+settingsTab:Dropdown("cursor_label", cursorNames, "Default", function(v)
+    for i, c in ipairs(CURSORS) do
+        if c.name == v then applyCursor(i) break end
+    end
 end)
 settingsTab:Section("sec_keybinds")
 settingsTab:Keybind("toggle_menu", Enum.KeyCode.RightControl, function(k) S.Keybinds.ToggleUI = k end)
@@ -1921,7 +2284,15 @@ serverTab:Button("server_hop", Misc.serverHop)
 -- ============================================================
 UserInputService.InputBegan:Connect(function(input, gp)
     if gp then return end
-    if input.KeyCode == S.Keybinds.ToggleUI then Root.Visible = not Root.Visible
+    if input.KeyCode == S.Keybinds.ToggleUI then
+        local nowVisible = not Root.Visible
+        Root.Visible = nowVisible
+        -- if we just hid the root via keybind, show the floating restore button
+        if not nowVisible then
+            MinimizedBtn.Visible = true
+        else
+            MinimizedBtn.Visible = false
+        end
     elseif input.KeyCode == S.Keybinds.ShootMurder then task.spawn(Combat.shootMurderer)
     elseif input.KeyCode == S.Keybinds.GrabGun then task.spawn(Grab.gun)
     elseif input.KeyCode == S.Keybinds.KillAll then S.killAllActive = not S.killAllActive
